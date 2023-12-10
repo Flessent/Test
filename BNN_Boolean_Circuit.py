@@ -2,6 +2,7 @@ import numpy as np
 #import lasagne
 #from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 import tensorflow as tf
+import random
 
 class BatchNormalization():
       def __init__(self, X, gamma, beta, bn_param):
@@ -11,7 +12,7 @@ class BatchNormalization():
             self.bn_param=bn_param
       
       
-      def batchnorm_forward(selft,bn_obj):
+      def batchnorm_forward(self):
             """
             Forward pass for batch normalization.
 
@@ -30,40 +31,45 @@ class BatchNormalization():
             - out: of shape (N, D)
             - cache: A tuple of values needed in the backward pass
             """
-            mode = bn_obj.bn_param['mode']
-            eps = bn_obj.bn_param.get('eps', 1e-5)
-            momentum =bn_obj.bn_param.get('momentum', 0.9)
+            
+            mode = self.bn_param['mode']
+            eps = self.bn_param.get('eps', 1e-5)
+            momentum = self.bn_param.get('momentum', 0.9)
+            print('X in feed forward',self.X)
 
-            N, D =bn_obj.X.shape
-            running_mean = bn_obj.bn_param.get('running_mean', np.zeros(D, dtype=bn_obj.X.dtype))
-            running_var = bn_obj.bn_param.get('running_var', np.zeros(D, dtype=bn_obj.X.dtype))
+            N, D = self.X.shape
+            running_mean = self.bn_param.get('running_mean', np.zeros(D, dtype=self.X.dtype))
+            running_var = self.bn_param.get('running_var', np.zeros(D, dtype=self.X.dtype))
 
             out, cache = None, None
             if mode == 'train':
-                  sample_mean = np.mean(bn_obj.X, axis=0)
-                  sample_var = np.var(bn_obj.X, axis=0)
+                  sample_mean = np.mean(self.X, axis=0)
+                  sample_var = np.var(self.X, axis=0)
 
                   # Normalization followed by Affine transformation
-                  x_normalized = (bn_obj.x - sample_mean)/np.sqrt(sample_var + eps)
-                  out = bn_obj.gamma * x_normalized + bn_obj.beta
+                  x_normalized = (self.X - sample_mean) / np.sqrt(sample_var + eps)
+                  print('Normalized Batch in feed forward',x_normalized)
+                  print('Gamma',self.gamma)
+                  print('Beta',self.beta)
+                  out = self.gamma * x_normalized + self.beta
 
                   # Estimate running average of mean and variance to use at test time
                   running_mean = momentum * running_mean + (1 - momentum) * sample_mean
                   running_var = momentum * running_var + (1 - momentum) * sample_var
 
                   # Cache variables needed during backpropagation
-                  cache = (bn_obj.X, sample_mean, sample_var, bn_obj.gamma, bn_obj.beta, eps)
+                  cache = (self.X, sample_mean, sample_var, self.gamma, self.beta, eps)
 
             elif mode == 'test':
                   # normalize using running average
-                  x_normalized = (bn_obj.X - running_mean)/np.sqrt(running_var + eps)
+                  x_normalized = (self.X - running_mean) / np.sqrt(running_var + eps)
 
                   # Learned affine transformation
-                  out = bn_obj.gamma*x_normalized + bn_obj.beta
+                  out = self.gamma * x_normalized + self.beta
 
                   # Store the updated running means back into bn_param for normalizing input data during testing
-                  bn_obj.bn_param['running_mean'] = running_mean
-                  bn_obj.bn_param['running_var'] = running_var
+                  self.bn_param['running_mean'] = running_mean
+                  self.bn_param['running_var'] = running_var
 
             return out, cache
 class Binarization():
@@ -117,24 +123,27 @@ def Binarize_Stochastic(self,W,b):
 class Neuron():
       def __init__(self,bias):
             self.bias=bias
-            self.weights=np.zeros( (10,2) )
-            self.inputs=np.zeros( (3,10)  )
-            self.outputs=np.zeros( (10,2)  )
+            self.weights=[] #np.zeros( (10,2) )
+            self.inputs=[] #np.zeros( (2,10)  )
+            self.outputs=[] #np.zeros( (10,2)  )
             
      
       def calculate_total_net_input(self):
         Z=0# Z=W*X +b
-        print("Total Nets :",self.inputs)
+        print("Contents inputs :",self.inputs)
+        print("contents weights :",self.weights)
+        print("size inputs :",len(self.inputs))
+        print('SIZE Weights  ', len(self.weights))
         for i in np.arange(len(self.inputs)):
-            print('Weights content', (self.weights[i]))
-            print('Inputs content',self.inputs[i] )
-            print('result:',(np.array( [item for sublist in self.inputs[i] for item in sublist])))
-            #Z+=self.weights[i] * np.array( [item for sublist in self.inputs[i] for item in sublist] )
-            print('Shape Weights', self.weights[i].shape)
-            print('Shape Inputs', self.inputs[i].shape)
-            Z += np.dot(self.weights[i], np.array (self.inputs[i]))
+                  
+                  #print('Inputs content',self.inputs[i] )
+                  #print('result:',(np.array( [item for sublist in self.inputs[i] for item in sublist])))
+                  #Z+=self.weights[i] * np.array( [item for sublist in self.inputs[i] for item in sublist] )
+                  #print('Shape Weights', self.weights[i])
+                  #print('Shape Inputs', self.inputs[i])
+                  Z += np.dot(self.weights[i], self.inputs[i]) +self.bias
 
-        return Z +self.bias
+        return Z
       
 
 
@@ -152,6 +161,7 @@ class Neuron():
         self.inputs = inputs
         print("Calculate Outputs :",self.inputs)
         self.outputs = binarization.signum(self.calculate_total_net_input())
+        print('Binarized outputs',self.outputs)
         return self.outputs
       
       # Backpropagation using chain rule : d(total_error)/d(weight)=dE/(d(output_after_activation))*(d(output_after_activation)/d(dZ))*(dZ/d(weight))
@@ -209,6 +219,7 @@ class NeuronLayer(tf.keras.layers.Layer):
                   #neuron.inputs=inputs
 
                   outputs.append(neuron.calculate_output(inputs))
+            print('Output in feed forward layer :',outputs)
 
             return outputs
       
@@ -256,12 +267,15 @@ class NeuralNetwork():
                   data=np.stack((x_train,y_train),axis=1)
                   np.random.shuffle(data)# ensure that the mini-batches are representative of the overall dataset and not biased by the order of the original data
                   nber_of_batches=x_train.shape[0]//batch_size# number of complete mini-batches that can be created from the data.
+                  print('NUMBER OF BATCH', nber_of_batches)
                   for i in range(nber_of_batches):
                         mini_batch=data[i*batch_size:(i+1)*batch_size]
                         mini_batches.append((mini_batch[:,0],mini_batch[:,1]))
-                  if x_train.shape[0]/batch_size!=0:# Checks if there are remaining samples that do not fit into complete mini-batches. If true, an additional mini-batch with the remaining samples is created and added to mini_batches
+                  if x_train.shape[0] % batch_size!=0:# Checks if there are remaining samples that do not fit into complete mini-batches. If true, an additional mini-batch with the remaining samples is created and added to mini_batches
+                        print('THERE WAS REST')
                         mini_batch=data[i*batch_size:]
                         mini_batches.append((mini_batch[:,0],mini_batch[:,1]))
+                  #print('#######################Returned mini batch',mini_batches)
                   return mini_batches
                   
 
@@ -271,25 +285,24 @@ class NeuralNetwork():
         #If this list is provided, the method will use these weights; otherwise, it will initialize random weights.
         
         weight_index = 0
-        print('Type',type(self.hidden_layer.set_of_neurons))
-        for h_n in np.arange(len(self.hidden_layer.set_of_neurons)):
-              for i in np.arange(self.num_inputs):# inputs of each neuron from a set_of_neuron for this particular hidden layer
-                    if not hidden_layer_weights:
-                         np.append(self.hidden_layer.set_of_neurons[h_n].weights,np.random.randn())
-                    else:
-                         np.append(self.hidden_layer.set_of_neurons[h_n].weights,hidden_layer_weights[weight_index] )
-                    weight_index+=1
+        for h_n in range(len(self.hidden_layer.set_of_neurons)):
+            for i in range(self.num_inputs):
+                if not hidden_layer_weights:
+                    self.hidden_layer.set_of_neurons[h_n].weights.append(random.random())
+                    #print('Weights in init : ',self.hidden_layer.set_of_neurons[h_n].weights)
+                else:
+                    self.hidden_layer.set_of_neurons[h_n].weights.append(hidden_layer_weights[weight_index])
+                weight_index += 1
 
       def init_weights_from_hidden_layer_neurons_to_output_layer_neurons(self,output_layer_weights):
             weight_index=0
-            for o_n in np.arange(len(self.output_layer.set_of_neurons)):
-                  for w in np.arange(len(self.hidden_layer.set_of_neurons)):
+            for o_n in range(len(self.output_layer.set_of_neurons)):
+                  for h in range(len(self.hidden_layer.set_of_neurons)):
                         if not output_layer_weights:
-                             np.append(self.output_layer.set_of_neurons[o_n].weights,np.random.randn())
-
+                              self.output_layer.set_of_neurons[o_n].weights.append(random.random())
                         else:
-                             np.append(self.output_layer.set_of_neurons[o_n].weights,output_layer_weights[weight_index])
-                        weight_index+=1
+                              self.output_layer.set_of_neurons[o_n].weights.append(output_layer_weights[weight_index])
+                        weight_index += 1
             """
       def train_batch(self, batch_inputs, batch_outputs):
         for t in range(len(batch_inputs)):
@@ -302,6 +315,7 @@ class NeuralNetwork():
             return X*(1-X)
 
       def feed_forward_neural_network(self,inputs):
+            print('X_Batch in feed nn ',inputs)
             hidden_layer_outputs = self.hidden_layer.feed_forward_layer (inputs)
             return self.output_layer.feed_forward_layer(hidden_layer_outputs)
      
@@ -311,32 +325,40 @@ class NeuralNetwork():
             self.m=np.random.randn(1,1) # just one dependant variable. if 2 then (2,2)
             self.c=np.random.randn(1,1)
             l=len(training_inputs)
-            print('provided inputs', training_inputs)
-
+            
+           
             for epoch in range(epochs):
                   batches=self.create_batch(training_inputs,training_outputs,batch_size)
-                  print("Batches in train batch  :",batches)
                   for batch in batches:
-                        X_batch=batch[0]
-                        y_batch=batch[1]
-                        X_batch=X_batch.reshape(1,X_batch.shape[0])
+                        print('Content of X',batch)
+                        batch=np.append( np.array(batch[0][0]), np.array(batch[1][0])).reshape(1,3)
+                        print('size of X',batch.size)
+                        batch_normalization=BatchNormalization(X=batch, gamma=np.ones(3),beta=np.ones(3),bn_param={'mode': 'train'})
+                        print('Content of X',batch)
+                        normalized_batch,cache=batch_normalization.batchnorm_forward()
+                        print('Normilized Batch',normalized_batch)
+                        X_batch=normalized_batch[:,:2]
+                        y_batch=normalized_batch[:,2]
+                        print('X_batch Final', X_batch)
+                        X_batch=X_batch.reshape(-1)
+                        print('X_batch Final 2', X_batch)
 
                         # Forward and backward pass
                         self.feed_forward_neural_network(X_batch)
                         self.backward_neural_network(X_batch, y_batch)
 
                   
-                  if epoch % 5000 == 0:
+                  if epoch % 50 == 0:
                         #print('Epoch :', epoch, 'Total Loss :', round(self.calculate_total_error(training_inputs), 9),
                               self.describe_neural_network()
-                  mse = np.mean(np.square(training_outputs - self.forward(training_inputs)))
+                  #print('TYPE HERE:',type(self.feed_forward_neural_network(X_batch)))
+                  mse = np.mean(np.square(y_batch - self.feed_forward_neural_network(X_batch)))
                   print(f"Epoch {epoch + 1}/{epochs}, Mean Squared Error: {mse}")
             return training_inputs
 
 
 
-
-       
+      
       
       def backward_neural_network(self, X_batch, y_batch):
         self.feed_forward_neural_network(X_batch)
@@ -411,13 +433,14 @@ def main():
      [[-1, 1], [1]],
      [[1, -1], [1]],
      [[1, 1], [-1]]
-                      ]
+      ],dtype=object
                       )
       #training_inputs, training_outputs = random.choice(training_sets)
       training_inputs,training_outputs=training_sets[:,0], training_sets[:,1]
+      print('******* Provided data in Main ', 'Inputs :',training_inputs,'Outputs:',training_outputs)
 
       nn = NeuralNetwork(len(training_sets[0][0]), 5, len(training_sets[0][1]))
-      tr_inp= nn.train_batch(training_inputs,training_outputs,10000,batch_size=1)
+      tr_inp= nn.train_batch(training_inputs,training_outputs,100,batch_size=1)
       print('Return of train_batch',tr_inp)
                 
       for i in np.arange(len(nn.output_layer.set_of_neurons)):
