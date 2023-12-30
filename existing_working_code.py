@@ -13,16 +13,17 @@ import time
 import sys
 import ast
 from z3 import And, Bool, Solver, sat
-from z3 import *
+import tensorflow as tf
+from z3 import Real, Solver, Sum, Sqrt, Implies, Not, Bool
 
-class LinearLayer(layers.Layer):
+class LinearLayer(tf.keras.layers.Layer):
     def __init__(self, num_neurons):
         super().__init__()
         self.num_neurons = num_neurons
         self.encoding_initialized = False
 
     def build(self, input_shape):
-        self.dense = layers.Dense(self.num_neurons)
+        self.dense = tf.keras.layers.Dense(self.num_neurons)
 
         # Initialize encoding variables outside the tf.function
         input_size, output_size = input_shape[-1], self.num_neurons
@@ -59,10 +60,6 @@ class LinearLayer(layers.Layer):
             'bias_vars': tf.constant([float(x) for x in self.bias_vars]),
             'output_vars': tf.constant([float(x) for x in self.output_vars]),
         }
-
-
-import tensorflow as tf
-from z3 import Real, Solver, Sum, Sqrt
 
 class BatchNormLayer(tf.keras.layers.Layer):
     def __init__(self, num_neurons, epsilon=1e-8):
@@ -136,9 +133,7 @@ class BatchNormLayer(tf.keras.layers.Layer):
 
         return inputs_tf, weights_tf, bias_tf, output_tf
 
-
-
-class BINLayer(layers.Layer):
+class BINLayer(tf.keras.layers.Layer):
     def __init__(self, num_neurons):
         super().__init__()
         self.num_neurons = num_neurons
@@ -173,8 +168,7 @@ class BINLayer(layers.Layer):
 
         return inputs_values, weights_values, bias_values, bin_inputs_values, bin_weights_values, bin_bias_values, bin_output_values, straight_through_output_values
 
-        
-    def encode_bin_layer(self,layer):
+    def encode_bin_layer(self, layer):
         num_neurons = layer.num_neurons
         input_size = layer.W.size()[0]
 
@@ -193,17 +187,15 @@ class BINLayer(layers.Layer):
         for i in range(input_size):
             constraints.append(bin_inputs[i] == If(inputs[i] >= -1.0 and inputs[i] <= 1.0, inputs[i], If(inputs[i] < -1.0, -1.0, 1.0)))
             for j in range(num_neurons):
-                constraints.append(bin_weights[i][j] == If(layer.W[i][j] >= 0, 1.0, -1.0))
+                constraints.append(bin_weights[i][j] == If(layer.W[i][j] >= 0, True, False))
         for j in range(num_neurons):
-            constraints.append(bin_bias[j] == If(layer.bias[j] >= 0, 1.0, -1.0))
+            constraints.append(bin_bias[j] == If(layer.bias[j] >= 0, True, False))
             constraints.append(bin_output[j] == bin_bias[j] + Sum([bin_inputs[i] * bin_weights[i][j] for i in range(input_size)]))
             constraints.append(straight_through_output[j] == bin_output[j] - inputs[j] + inputs[j])
 
         return inputs, weights, bias, bin_inputs, bin_weights, bin_bias, bin_output, straight_through_output, constraints
-    
 
-
-class ArgmaxLayer(layers.Layer):
+class ArgmaxLayer(tf.keras.layers.Layer):
     def __init__(self, num_neurons):
         super().__init__()
         self.num_neurons = num_neurons
@@ -228,7 +220,8 @@ class ArgmaxLayer(layers.Layer):
         output_values = [model.eval(var).as_decimal(10) for var in output]
 
         return inputs_values, output_values
-    def encode_argmax_layer(self,layer):
+
+    def encode_argmax_layer(self, layer):
         num_neurons = layer.num_neurons
 
         # Variables
@@ -240,16 +233,14 @@ class ArgmaxLayer(layers.Layer):
 
         # Constraint: Argmax calculation
         for i in range(num_neurons):
-            constraints.append(Implies(inputs[i] == max(inputs), output == i))
+            constraints.append(Implies(inputs[i] == Max(inputs), output == i))
 
         return inputs, output, constraints
 
-
-
 # Build the model for training
 def build_train_model(num_blocks):
-    model = models.Sequential()
-    model.add(layers.Flatten(input_shape=(28, 28)))
+    model = tf.keras.models.Sequential()
+    model.add(tf.keras.layers.Flatten(input_shape=(28, 28)))
     for _ in range(num_blocks - 1):  # Add 3 internal blocks
         model.add(LinearLayer(num_neurons=128))
         model.add(BatchNormLayer(num_neurons=128))
@@ -258,17 +249,15 @@ def build_train_model(num_blocks):
     model.add(ArgmaxLayer(num_neurons=10))
     return model
 
-
 # Build the model for predictions
 def build_predict_model(num_blocks):
     model = build_train_model(num_blocks)
     model.add(ArgmaxLayer(10))  # Add the ARGMAX layer
     return model
 
-
 def main():
     # Load the data
-    (X_train, Y_train), (X_test, Y_test) = mnist.load_data()
+    (X_train, Y_train), (X_test, Y_test) = tf.keras.datasets.mnist.load_data()
 
     # Normalize the data
     X_train = X_train / 255.0
@@ -355,7 +344,7 @@ def main():
     plt.xlabel("Predicted Label")
     plt.ylabel("True Label")
     plt.title("Confusion Matrix")
-    plt.show()
 
 if __name__ == "__main__":
     main()
+   
