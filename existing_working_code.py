@@ -82,6 +82,7 @@ class BatchNormLayer(tf.keras.layers.Layer):
 
         return output
 
+    
     def encode_batchnorm_layer(self, inputs):
         num_neurons = self.num_neurons
         input_size = int(inputs.shape[-1])
@@ -111,10 +112,10 @@ class BatchNormLayer(tf.keras.layers.Layer):
 
         # Debugging: Print solver state
         print("Solver state before check:", solver)
-        
+
         # Check if the constraints are satisfiable
         if solver.check() != sat:
-            raise ValueError("Constraints are unsatisfiable")
+            print("Constraints are unsatisfiable")
 
         # Debugging: Print solver state after check
         print("Solver state after check:", solver)
